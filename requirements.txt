@@ -1,0 +1,9 @@
+Flask==3.0.0
+geopandas==0.14.4
+shapely==2.0.4
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.11.3
+fiona==1.9.6
+pyproj==3.6.1
+rtree==1.2.0
