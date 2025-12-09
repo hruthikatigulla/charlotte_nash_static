@@ -3,6 +3,7 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -12,20 +13,27 @@ def home():
 def recompute_static():
     facility = request.args.get("facility", "")
 
+    # Nashville – BJJ
     if facility == "nash_bjj":
         with open("static/nash_bjj.json") as f:
             return jsonify(json.load(f))
 
+    # Nashville – CrossFit
     if facility == "nash_cf":
         with open("static/nash_cf.json") as f:
             return jsonify(json.load(f))
 
-    return jsonify({"ok": False, "error": "Charlotte disabled for demo"})
+    # Charlotte – Harris Teeter (NEW)
+    if facility == "charlotte_ht":
+        with open("static/charlotte_ht.json") as f:
+            return jsonify(json.load(f))
+
+    return jsonify({"ok": False, "error": f"Unknown facility '{facility}'"})
 
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "message": "Static Nashville demo running"})
+    return jsonify({"ok": True, "message": "Static site selection demo running"})
 
 
 # No dynamic blocks (optional)
