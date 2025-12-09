@@ -3,16 +3,24 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Nashville Site Selection – Static Demo</title>
+<title>Site Selection – Nashville & Charlotte (Static Demo)</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
 <style>
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-  header { background:#006d68; color:#fff; padding:12px 18px; font-weight:700; font-size:22px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  header {
+    background:#006d68; color:#fff; padding:12px 18px;
+    font-weight:700; font-size:22px;
+    box-shadow:0 2px 6px rgba(0,0,0,.2);
+  }
   #map { position:absolute; top:64px; bottom:0; left:360px; right:0; }
-  .panel { position:absolute; top:76px; left:12px; width:330px; background:#fff; padding:14px; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.12); z-index:1000; }
+  .panel {
+    position:absolute; top:76px; left:12px; width:330px;
+    background:#fff; padding:14px; border-radius:12px;
+    box-shadow:0 10px 24px rgba(0,0,0,.12); z-index:1000;
+  }
   .panel h3 { margin:0 0 12px; }
   .row { margin-bottom:10px; }
   ol#top-list { padding-left:18px; }
@@ -27,7 +35,7 @@
 </head>
 
 <body>
-<header>Harris Teeter & Gyms – Nashville Static Demo</header>
+<header>Harris Teeter & Gyms – Nashville & Charlotte (Static Demo)</header>
 
 <div class="panel">
 
@@ -37,6 +45,8 @@
     <select id="facility">
       <option value="nash_bjj">Nashville – BJJ</option>
       <option value="nash_cf">Nashville – CrossFit</option>
+      <!-- NEW: Charlotte option -->
+      <option value="charlotte_ht">Charlotte – Harris Teeter</option>
     </select>
   </div>
 
@@ -61,8 +71,9 @@
 <script>
 /* ---------------- MAP SETUP ---------------- */
 const facilityCenters = {
-  "nash_bjj": [36.1627, -86.7816],
-  "nash_cf": [36.1627, -86.7816]
+  "nash_bjj": [36.1627, -86.7816],    // Nashville
+  "nash_cf": [36.1627, -86.7816],     // Nashville
+  "charlotte_ht": [35.2271, -80.8431] // Charlotte uptown
 };
 
 const map = L.map("map").setView(facilityCenters["nash_bjj"], 11);
@@ -164,12 +175,12 @@ function draw(payload){
 /* ---------------- FETCH STATIC JSON ---------------- */
 async function loadStaticResult(){
   const facility = document.getElementById("facility").value;
-
   const url = `/recompute?facility=${facility}`;
+
   const res = await fetch(url);
   const payload = await res.json();
   if (!payload.ok){
-    alert("Error loading static data");
+    alert(payload.error || "Error loading static data");
     return;
   }
   draw(payload);
