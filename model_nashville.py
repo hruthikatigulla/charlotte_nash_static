@@ -18,7 +18,7 @@ CRS_M  = 3857      # Web Mercator as a generic metric CRS for Nashville
 MILE_M = 1609.344
 
 # ----------- FILES (Nashville data) -----------
-BG_FILE       = "nashville_data/nashville_bg_with_age.geojson"
+BG_FILE       = "nashville_data/nashville_bg_with_income.geojson"
 ROADS_FILE    = "nashville_data/nashville_roads_drive.geojson"
 BOUNDARY_FILE = "nashville_data/nashville_boundary.geojson"
 GYMS_FILE     = "nashville_data/gyms_nashville_clean.geojson"  # all gyms with names
@@ -64,7 +64,6 @@ def huff_share_vs_competitors(t_new: np.ndarray, t_comps: np.ndarray, beta: floa
     A_comp = np.sum(1.0 / (t_comps_safe ** beta), axis=1)
 
     return A_new / (A_new + A_comp + 1e-9)
-
 
 
 # ------------------- ROAD GRAPH HELPERS -------------------
@@ -276,6 +275,9 @@ def load_nashville():
     if pop_col != "population":
         bg_ll = bg_ll.rename(columns={pop_col: "population"})
 
+    # NEW: coerce population to numeric (turn '-', '' etc. into NaN)
+    bg_ll["population"] = pd.to_numeric(bg_ll["population"], errors="coerce")
+
     # income
     inc_col = _first_existing(
         bg_ll.columns,
@@ -286,6 +288,9 @@ def load_nashville():
         inc_col = "income"
     elif inc_col != "income":
         bg_ll = bg_ll.rename(columns={inc_col: "income"})
+
+    # NEW: coerce income to numeric (turn '-', '' etc. into NaN)
+    bg_ll["income"] = pd.to_numeric(bg_ll["income"], errors="coerce")
 
     # ---- ROADS ----
     roads_ll = _read_to_ll(ROADS_FILE)
