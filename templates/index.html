@@ -31,6 +31,43 @@
     font-size:13px; color:#444; background:#f3f3f3;
     border-radius:6px; border:1px solid #ccc;
   }
+
+  /* blocks polygons */
+  .blocks-poly {
+    stroke:#004b87;
+    stroke-width:1.1;
+    fill-opacity:0.35;
+  }
+
+  /* existing-facility marker style */
+  .existing-pin {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 999px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 11px;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.35);
+  }
+  .existing-pin::after {
+    content: "";
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 6px 5px 0 5px;
+    border-color: rgba(0,0,0,0.25) transparent transparent transparent;
+    opacity: 0.6;
+  }
 </style>
 </head>
 
@@ -45,7 +82,6 @@
     <select id="facility">
       <option value="nash_bjj">Nashville – BJJ</option>
       <option value="nash_cf">Nashville – CrossFit</option>
-      <!-- NEW: Charlotte option -->
       <option value="charlotte_ht">Charlotte – Harris Teeter</option>
     </select>
   </div>
@@ -76,10 +112,29 @@ const facilityCenters = {
   "charlotte_ht": [35.2271, -80.8431] // Charlotte uptown
 };
 
-const map = L.map("map").setView(facilityCenters["nash_bjj"], 11);
+const map = L.map("map", {
+  zoomControl: true
+}).setView(facilityCenters["nash_bjj"], 11);
+
+// ---- PANES TO CONTROL Z-ORDER ----
+map.createPane("paneHeat");
+map.getPane("paneHeat").style.zIndex = 350;     // heat lower (canvas)
+
+map.createPane("paneBlocks");
+map.getPane("paneBlocks").style.zIndex = 450;   // polygons above heat
+
+map.createPane("paneCompetitors");
+map.getPane("paneCompetitors").style.zIndex = 600; // competitor dots
+
+map.createPane("paneMarkers");
+map.getPane("paneMarkers").style.zIndex = 650;  // existing brand facilities
+
+map.createPane("paneTop10");
+map.getPane("paneTop10").style.zIndex = 700;    // recommended top-10
+
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19}).addTo(map);
 
-let heatLayer=null, htLayer=null, compLayer=null, topLayer=null;
+let heatLayer=null, htLayer=null, compLayer=null, topLayer=null, blocksLayer=null;
 let layersControl = L.control.layers(null, null, {collapsed:false}).addTo(map);
 
 const fmt0 = n => Number.isFinite(n) ? n.toFixed(0) : "0";
@@ -88,69 +143,180 @@ const money = n => Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFract
 
 /* ---------------- HELPERS ---------------- */
 function clearOverlays() {
-  const overlays = [heatLayer, htLayer, compLayer, topLayer];
+  const overlays = [heatLayer, htLayer, compLayer, topLayer, blocksLayer];
   overlays.forEach(l => {
     if (l) {
       map.removeLayer(l);
       try { layersControl.removeLayer(l); } catch(_) {}
     }
   });
-  heatLayer = htLayer = compLayer = topLayer = null;
+  heatLayer = htLayer = compLayer = topLayer = blocksLayer = null;
+}
+
+/* ---------------- COLOR SCALE FOR BLOCK DENSITY ---------------- */
+function densityColor(d) {
+  if (d >= 8000) return "#084081";
+  if (d >= 6000) return "#0868ac";
+  if (d >= 4000) return "#2b8cbe";
+  if (d >= 2000) return "#4eb3d3";
+  if (d >= 1000) return "#7bccc4";
+  if (d >= 500)  return "#a8ddb5";
+  if (d > 0)     return "#ccebc5";
+  return "#f7f7f7";
+}
+
+/* ---------------- BLOCKS LAYER (STATIC GEOJSON) ---------------- */
+const blockFiles = {
+  "nash_bjj": "/static/blocks_nashville.json",
+  "nash_cf": "/static/blocks_nashville.json",
+  "charlotte_ht": "/static/blocks_charlotte.json"
+};
+
+async function loadBlocksForFacility(facility) {
+  const url = blockFiles[facility];
+  if (!url) return;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (blocksLayer) {
+      map.removeLayer(blocksLayer);
+      try { layersControl.removeLayer(blocksLayer); } catch(_) {}
+    }
+
+    blocksLayer = L.geoJSON(data, {
+      pane: "paneBlocks",
+      style: function(feature) {
+        const props = feature.properties || {};
+        const dens = Number(props.pop_per_sqmi || 0);
+        return {
+          color: "#004b87",
+          weight: 1.1,
+          fillColor: densityColor(dens),
+          fillOpacity: 0.35,
+          className: "blocks-poly"
+        };
+      },
+      onEachFeature: function(feature, layer) {
+        const p = feature.properties || {};
+        const pop   = Number(p.population || 0);
+        const dens  = Number(p.pop_per_sqmi || 0);
+        const inc   = Number(p.median_income || 0);
+        const area  = Number(p.area_sqmi || 0);
+
+        const html = `
+          <b>Block group</b><br/>
+          Population: ${pop.toLocaleString()}<br/>
+          Pop / sq mi: ${dens.toFixed(0)}<br/>
+          Median income: $${inc.toLocaleString()}<br/>
+          Area: ${area.toFixed(2)} sq mi
+        `;
+
+        // Popup on click
+        layer.bindPopup(html);
+
+        // Tooltip on hover
+        layer.bindTooltip(html, {
+          sticky: true,
+          direction: "top",
+          opacity: 0.9
+        });
+      }
+    }).addTo(map);
+
+    layersControl.addOverlay(blocksLayer, "Block groups (granular)");
+  } catch (err) {
+    console.error("Error loading blocks layer", err);
+  }
+}
+
+/* ---------- helper: existing-facility icon ---------- */
+function existingLabelForFacility(facility) {
+  if (facility === "nash_bjj") return "BJJ";
+  if (facility === "nash_cf")  return "CF";
+  if (facility === "charlotte_ht") return "HT";
+  return "";
+}
+
+function createExistingIcon(label) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="existing-pin" style="background:#2e7d32;">${label}</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 30],
+    popupAnchor: [0, -30]
+  });
 }
 
 /* ---------------- DRAW MAP LAYERS ---------------- */
-function draw(payload){
+function draw(payload, facility){
+  // clear EVERYTHING including blocks;
+  const oldBlocks = blocksLayer;
+  blocksLayer = null;
   clearOverlays();
+  blocksLayer = oldBlocks;  // keep reference so loadBlocksForFacility can remove if needed
 
   /* HEATMAP */
-  if (payload.heat_points?.length){
-    heatLayer = L.heatLayer(payload.heat_points,{radius:18,blur:16,maxZoom:14}).addTo(map);
+  if (payload.heat_points && payload.heat_points.length){
+    heatLayer = L.heatLayer(payload.heat_points,{
+      pane: "paneHeat",
+      radius:18, blur:16, maxZoom:14
+    }).addTo(map);
     layersControl.addOverlay(heatLayer, "Heatmap");
   }
 
-  /* EXISTING BRAND FACILITIES */
-  if (payload.ht_scored?.length){
+  /* EXISTING BRAND FACILITIES (green pill markers with label) */
+  if (payload.ht_scored && payload.ht_scored.length){
+    const label = existingLabelForFacility(facility);
     htLayer = L.layerGroup(
       payload.ht_scored.map(ht => {
         const popup = `
           <b>Existing facility</b><br/>
           Score: ${fmt2(ht.score)}<br/>
           Stores per 10k: ${fmt2(ht.stores_per_10k)}<br/>
-          Road length: ${fmt0(ht.access_len_m)} m<br/>
           Median income: $${money(ht.income_med)}<br/>
           Dijkstra access: ${fmt2(ht.access_score_dj)}
         `;
-        return L.circleMarker([ht.lat,ht.lon],{
-          radius:5,color:"#00897B",weight:2,fillColor:"#00A08A",fillOpacity:0.8
+
+        const marker = L.marker([ht.lat, ht.lon], {
+          pane: "paneMarkers",
+          icon: createExistingIcon(label)
         }).bindPopup(popup);
+
+        marker.on("mouseover", e => e.target.openPopup());
+
+        return marker;
       })
     ).addTo(map);
-    layersControl.addOverlay(htLayer, "Brand facilities");
+    layersControl.addOverlay(htLayer, "Existing facilities (scored)");
   }
 
   /* COMPETITORS */
-  if (payload.competitors?.length){
+  if (payload.competitors && payload.competitors.length){
     compLayer = L.layerGroup(payload.competitors.map(
       ([lat,lon]) => L.circleMarker([lat,lon],{
-        radius:3,color:"#F4511E"
-      }).bindTooltip("Competitor")
+        pane: "paneCompetitors",
+        radius:3,
+        color:"#F4511E",
+        weight:1
+      }).bindTooltip("Competitor", {permanent:false, direction:"top"})
     )).addTo(map);
     layersControl.addOverlay(compLayer, "Competitors");
   }
 
-  /* TOP-10 */
+  /* TOP-10 NEW SITES (blue pins) */
   const ol = document.getElementById("top-list");
   ol.innerHTML = "";
-  if (payload.top10?.length){
+  if (payload.top10 && payload.top10.length){
     topLayer = L.layerGroup();
     payload.top10.forEach((p,i)=>{
-      const m = L.marker([p.lat,p.lon]).bindPopup(
-        `<b>#${i+1}</b><br/>
-         score: ${fmt2(p.score)}<br/>
-         stores/10k: ${fmt2(p.stores_per_10k)}<br/>
-         access (road m): ${fmt0(p.access_len_m)}<br/>
-         median income: $${money(p.income_med)}<br/>
-         access score: ${fmt2(p.access_score_dj)}`
+      const m = L.marker([p.lat,p.lon], { pane: "paneTop10" }).bindPopup(
+        `<b>#${i+1} – New site</b><br/>
+         Score: ${fmt2(p.score)}<br/>
+         Stores per 10k: ${fmt2(p.stores_per_10k)}<br/>
+         Median income: $${money(p.income_med)}<br/>
+         Dijkstra access: ${fmt2(p.access_score_dj)}`
       );
       topLayer.addLayer(m);
 
@@ -158,7 +324,6 @@ function draw(payload){
       li.innerHTML = `#${i+1} • score=${fmt2(p.score)}<br/>
         <span class="kpi">
           <strong>Stores per 10k:</strong> ${fmt2(p.stores_per_10k)}<br/>
-          <strong>Accessibility:</strong> ${fmt0(p.access_len_m)} m<br/>
           <strong>Median income:</strong> $${money(p.income_med)}<br/>
           <strong>Dijkstra access:</strong> ${fmt2(p.access_score_dj)}
         </span>`;
@@ -168,7 +333,7 @@ function draw(payload){
     });
 
     topLayer.addTo(map);
-    layersControl.addOverlay(topLayer, "Top-10");
+    layersControl.addOverlay(topLayer, "Top-10 new sites");
   }
 }
 
@@ -183,7 +348,11 @@ async function loadStaticResult(){
     alert(payload.error || "Error loading static data");
     return;
   }
-  draw(payload);
+
+  draw(payload, facility);
+
+  // load corresponding blocks layer (granular population)
+  loadBlocksForFacility(facility);
 }
 
 /* ---------------- EVENT HANDLERS ---------------- */
