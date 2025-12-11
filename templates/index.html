@@ -39,7 +39,7 @@
     fill-opacity:0.35;
   }
 
-  /* existing-facility marker style */
+  /* existing facility marker pill */
   .existing-pin {
     position: relative;
     display: inline-flex;
@@ -68,6 +68,10 @@
     border-color: rgba(0,0,0,0.25) transparent transparent transparent;
     opacity: 0.6;
   }
+
+  /* make popups & tooltips always on top of markers */
+  .leaflet-popup-pane { z-index: 10050 !important; }
+  .leaflet-tooltip-pane { z-index: 10040 !important; }
 </style>
 </head>
 
@@ -117,8 +121,9 @@ const map = L.map("map", {
 }).setView(facilityCenters["nash_bjj"], 11);
 
 // ---- PANES TO CONTROL Z-ORDER ----
+// Put HEAT lower, BLOCKS above it so blocks get mouse events.
 map.createPane("paneHeat");
-map.getPane("paneHeat").style.zIndex = 350;     // heat lower (canvas)
+map.getPane("paneHeat").style.zIndex = 350;     // heat (canvas) lower
 
 map.createPane("paneBlocks");
 map.getPane("paneBlocks").style.zIndex = 450;   // polygons above heat
@@ -213,7 +218,7 @@ async function loadBlocksForFacility(facility) {
           Area: ${area.toFixed(2)} sq mi
         `;
 
-        // Popup on click
+        // Popup on click (optional)
         layer.bindPopup(html);
 
         // Tooltip on hover
